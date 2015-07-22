@@ -64,7 +64,8 @@ static int  xioctl(int  fd, int  request, void *arg)
 } 
 
 static void process_image (const void *p,int len) 
-{ 
+{
+/* 
 	unsigned short int *rep;
 	rep=(unsigned short int *)p;
 	int i=0,bits_per_pixel =16;                      
@@ -107,6 +108,10 @@ static void process_image (const void *p,int len)
 	printf("len:%d\n",len);
 	fputc ('.', stdout); 
 	fflush (stdout); 
+*/
+	/* do something for youself
+	**
+	*/
 } 
 
 static int read_frame(void) 
