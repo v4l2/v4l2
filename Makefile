@@ -4,7 +4,7 @@ IFALGS = -idirafter dummyinc
 CFLAGS = -O2 -Wall -W -Wshadow
 
 
-LIBS = 
+LIBS = `sh mk_out_path.sh` 
 LINK = 
 
 OBJS = capture.o 
@@ -14,7 +14,8 @@ OBJS = capture.o
 	$(CC) -c $*.c $(CFLAGS) $(IFLAGS)
 
 v4l2_capture: $(OBJS)
-	$(CC) -o v4l2_capture $(OBJS)
+	$(CC) -o v4l2_capture $(OBJS) 
+	$(LIBS)
 
 clean:
-	rm -f *.o v4l2_capture
+	rm -rf out
