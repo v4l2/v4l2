@@ -68,55 +68,75 @@ static int  xioctl(int xfd, int request, void *arg)
 
 static void process_image (const void *p,int len) 
 {
-/* 
-	unsigned short int *rep;
-	rep=(unsigned short int *)p;
-	int i=0,bits_per_pixel =16;                      
-	int line_x =line_y = 0;
-	int xres=600;
-	int InfoHead.ciHeight=480;
+	/* 
+	   unsigned short int *rep;
+	   rep=(unsigned short int *)p;
+	   int i=0,bits_per_pixel =16;                      
+	   int line_x =line_y = 0;
+	   int xres=600;
+	   int InfoHead.ciHeight=480;
 	//向framebuffer中写BMP图片
 	int ftp=open("/dev/fb0",O_RDWR);
 	printf("ftp:%d\n",ftp);
 	while(!feof(p))
 	{
-		PIXEL *pix;
-		unsigned short int tmp;
-		//rc = fread( (char *)&pix, 1, sizeof(unsigned short int), fp);
-		//if (rc != sizeof(unsigned short int))
-		//{ 
-		// break; 
-		//}
-		pix=*(rep+i++);
-		location = line_x * bits_per_pixel / 8 + (InfoHead.ciHeight - line_y - 1) * xres * bits_per_pixel / 8;
+	PIXEL *pix;
+	unsigned short int tmp;
+	//rc = fread( (char *)&pix, 1, sizeof(unsigned short int), fp);
+	//if (rc != sizeof(unsigned short int))
+	//{ 
+	// break; 
+	//}
+	pix=*(rep+i++);
+	location = line_x * bits_per_pixel / 8 + (InfoHead.ciHeight - line_y - 1) * xres * bits_per_pixel / 8;
 
-		//显示每一个像素
-		tmp=pix.red<<0 | pix.green<<5 | pix.blue<<11;
-		*((unsigned short int*)(ftp + location)) = tmp;
+	//显示每一个像素
+	tmp=pix.red<<0 | pix.green<<5 | pix.blue<<11;
+	 *((unsigned short int*)(ftp + location)) = tmp;
 
-		line_x++;
-		if (line_x == InfoHead.ciWidth )
+	 line_x++;
+	 if (line_x == InfoHead.ciWidth )
+	 {
+	 line_x = 0;
+	 line_y++;
+
+	 if(line_y == InfoHead.ciHeight)
+	 {
+	 break;
+	 }
+	 }
+	 }
+
+
+	 printf("len:%d\n",len);
+	 fputc ('.', stdout); 
+	 fflush (stdout); 
+	 */
+
+
+	/* do something by youself
+	 **
+	 */
+	int i;
+	int retval;
+	int rlen;
+	int *socket_fds;
+	int nums;
+	
+	get_socket_fds(socket_fds, &nums);
+
+	for (i = 0; i < nums; i++)
+	{
+		rlen = write(fds[i], (char *)p, len);
+		if (rlen != len)
 		{
-			line_x = 0;
-			line_y++;
-
-			if(line_y == InfoHead.ciHeight)
-			{
-				break;
-			}
+			over_threads();
+			socket_close(fds);
+			free(socket_fds);
+			bug("socket write\n");
 		}
 	}
-
-
-	printf("len:%d\n",len);
-	fputc ('.', stdout); 
-	fflush (stdout); 
-*/
-
-	
-	/* do something for youself
-	**
-	*/
+	free(socket_fds);
 } 
 
 static int read_frame(void) 
@@ -612,7 +632,7 @@ long_options [] = {
 int main(int argc,  char **  argv) 
 { 
 	dev_name = "/dev/video0";
- 
+
 	for (;;) 
 	{ 
 		int index; 
@@ -643,23 +663,7 @@ int main(int argc,  char **  argv)
 				exit (EXIT_FAILURE); 
 		} 
 	}
-/*
-	{
-		int retval = 0;
-		struct stat *p_statbuf = 0;
-		p_statbuf = (struct stat *)malloc(sizeof(struct stat));
-		if (NULL == p_statbuf)
-		{
-			bug("error, zero or big size in malloc(statbuf)");
-		}
-		retval = stat(config_name, p_statbuf);
-		if (-1 == retval)
-		{
-			bug("error, stat(config file)");
-		}
-		v4l2_load_file(config_name, );
-	}
-*/		
+
 	open_device(); 
 	init_device(); 
 	start_capturing(); 
