@@ -7,10 +7,14 @@ CFLAGS = -O2 -Wall -W -Wshadow
 LIBS = 
 LINK = 
 
-OBJS = 
+OBJS = capture.o 
 
 
-.c.0:
+.c.o:
+	$(CC) -c $*.c $(CFLAGS) $(IFLAGS)
 
 v4l2_capture: $(OBJS)
-	$(CC)
+	$(CC) -o v4l2_capture $(OBJS)
+
+clean:
+	rm -f *.o v4l2_capture

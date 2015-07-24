@@ -27,6 +27,9 @@
 
 #define CLEAR(x) memset (&(x), 0, sizeof (x)) 
 
+#define DEFAULT_WIDTH  800
+#define DEFAULT_HEIGHT 600
+
 typedef enum { 
 	IO_METHOD_READ, 
 	IO_METHOD_MMAP, 
@@ -52,11 +55,11 @@ static void errno_exit (const char *   s)
 	exit (EXIT_FAILURE); 
 } 
 
-static int  xioctl(int  fd, int  request, void *arg) 
+static int  xioctl(int xfd, int request, void *arg) 
 { 
 	int r; 
 
-	do r = ioctl (fd, request, arg); 
+	do r = ioctl (xfd, request, arg); 
 	while (-1 == r && EINTR == errno); 
 
 
@@ -109,6 +112,8 @@ static void process_image (const void *p,int len)
 	fputc ('.', stdout); 
 	fflush (stdout); 
 */
+
+	
 	/* do something for youself
 	**
 	*/
@@ -521,8 +526,8 @@ static void init_device(void)
 
 
 	fmt.type                = V4L2_BUF_TYPE_VIDEO_CAPTURE; 
-	fmt.fmt.pix.width       = 600;  
-	fmt.fmt.pix.height      = 480; 
+	fmt.fmt.pix.width       = DEFAULT_WIDTH;  
+	fmt.fmt.pix.height      = DEFAULT_HEIGHT; 
 	fmt.fmt.pix.pixelformat = V4L2_PIX_FMT_YUYV; 
 	fmt.fmt.pix.field       = V4L2_FIELD_INTERLACED; 
 
@@ -606,7 +611,8 @@ long_options [] = {
 
 int main(int argc,  char **  argv) 
 { 
-	dev_name = "/dev/video0"; 
+	dev_name = "/dev/video0";
+ 
 	for (;;) 
 	{ 
 		int index; 
@@ -615,7 +621,7 @@ int main(int argc,  char **  argv)
 		if (-1 == c) 
 			break;  
 		switch (c) { 
-			case 0: /* getopt_long() flag */ 
+			case 0: // getopt_long() flag
 				break;  
 			case 'd': 
 				dev_name = optarg; 
@@ -636,7 +642,24 @@ int main(int argc,  char **  argv)
 				usage (stderr, argc, argv); 
 				exit (EXIT_FAILURE); 
 		} 
-	} 
+	}
+/*
+	{
+		int retval = 0;
+		struct stat *p_statbuf = 0;
+		p_statbuf = (struct stat *)malloc(sizeof(struct stat));
+		if (NULL == p_statbuf)
+		{
+			bug("error, zero or big size in malloc(statbuf)");
+		}
+		retval = stat(config_name, p_statbuf);
+		if (-1 == retval)
+		{
+			bug("error, stat(config file)");
+		}
+		v4l2_load_file(config_name, );
+	}
+*/		
 	open_device(); 
 	init_device(); 
 	start_capturing(); 
