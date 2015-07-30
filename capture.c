@@ -24,7 +24,7 @@
 #include <asm/types.h>          /* for videodev2.h */ 
 
 #include <linux/videodev2.h> 
-
+#include "myv4l2.h"
 #define CLEAR(x) memset (&(x), 0, sizeof (x)) 
 
 #define DEFAULT_WIDTH  800
@@ -663,7 +663,20 @@ int main(int argc,  char **  argv)
 				exit (EXIT_FAILURE); 
 		} 
 	}
-
+	
+	//create thread
+	pid_t pid;
+	pid = fork();
+	if (pid < 0)
+	{
+		perror("error:");
+		exit(-1);
+	}
+	if (pid == 0)
+	{
+		// to do
+		create_save_socket();
+	}
 	open_device(); 
 	init_device(); 
 	start_capturing(); 
