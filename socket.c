@@ -13,6 +13,7 @@
 #include "myv4l2.h"
 
 #define ADDRSIZE    20
+#define MAX_FDS     6
 int v_socket(const char *host, int clientPort)
 {
 	int sock;
@@ -35,10 +36,8 @@ int v_socket(const char *host, int clientPort)
 		memcpy(&ad.sin_addr, hp->h_addr, hp->h_length);
 	}
 
-	sock = socket(AF_INET, SOCK_STREAM, 0);
+	sock = socket(AF_INET, SOCK_DGRAM, 0);
 	if (sock < 0)
-		return sock;
-	if (connect(sock, (struct sockaddr *)&ad, sizeof(ad)) < 0)
 		return -1;
 	return sock;
 }
@@ -113,6 +112,7 @@ void get_host_addr(char *host)
 	}
 	
 	host = addr->v4_addr;
+	system("rm -rf ifconfig.txt");
 	free(addr->v4_addr);
 	free(addr);
 }
@@ -121,10 +121,11 @@ void create_save_socket(void)
 {
 	fd_set fds; 
 	
-	int socks[10];
+	struct shared_sock share_mem[MAX_FDS];
 	int num;
 	int sock;
 	int maxfd;
+	int fd;
 	int i;
 	//struct timeval tv;
 	/* Timeout. */ 
@@ -133,30 +134,88 @@ void create_save_socket(void)
 	//tv.tv_usec = 0;
 
 	char *host;
-	host =(char *) malloc(ADDRSIZE);
+
+	shmid = shmget((key_t)1234, 6*sizeof(struct shared_sock), 0666);
+	if(shmid == -1)
+	{
+		perror("shmet failed");
+	}
+	shm = shmat(shmid, 0, 0);
+	if(shm == (void *)-1)
+	{
+		perror("shmat failed");	
+	}
+	printf("\nMemory attached at %x\n", (int)shm);
+	shared = (struct shared_sock *)shm;
+	
+	//init share_mem;
+	for(i = 0; i < MAX_FDS; i++)
+		{
+			share_mem[i].fd = -1;
+			memset(&share_mem[i].s_addr, 0, sizeof(shared[i].s_addr));
+		}
+
+	host =(char *)malloc(ADDRSIZE);
 	get_host_addr(host);	
 	sock = v_socket(host, PORT);
-	maxfd = fd;
+	if (-1 == sock)
+	{
+		perror("error:");
+		exit(-1);
+	}
+	maxfd = sock;
+	memset(socks, -1, MAX_FDS);
 	while (1)
 	{
-		// reflash sock_fd, and save it to share_mem_sock[] 
-		FD_ZERO (&fds); 
-		FD_SET (fd, &fds); 
-		
-		//add other sock to &fds
-		read_share_mem_sock(socks, &num);
-		for (i = 0; i < num, i++)
+		//reflash sock_fd, and save it to share_mem_sock[]
+ 		//init shared mem
+		semaphore_p();
+		for(i = 0; i < MAX_FDS; i++)
 		{
-			FD_SET(socks[i], &fds);
-			maxfd = maxfd > socks[i]?maxfd : socks[i];
+			shared[i].fd = share_mem[i].fd;
+			memcpy(&shared[i].s_addr, &share_mem.s_addr);
 		}
+		semaphore_v();
+		
+		FD_ZERO (&fds);
+		FD_SET(sock, &fds);
+		for (i = 0; i < MAX_FDS; i++)
+		{
+			if (share_mem[i].fd != -1)
+			{
+				FD_SET(socks[i], &fds);
+				maxfd = maxfd > share_mem[i].fd?maxfd:share_mem[i].fd;
+			}
+		}
+		//wait
 		r = select (maxfd + 1, &fds, NULL, NULL, NULL); 
-
-		if (-1 == r) { 
+		if (-1 == r) 
+		{
 			if (EINTR == errno) 
 				continue; 
 			//to do something
 			exit (-1); 
-		} 	 
+		}
+		if (FD_ISSET(sock, &fds))
+		{
+			fd = connect(sock, (struct sockaddr *)&ad, sizeof(ad));
+			for(i = 0; i < MAX_FDS; i++)
+			{
+				if (share_mem[i].fd == -1)
+				{
+					share_mem[i].fd = fd;
+					memcpy(&share_mem.s_addr, &ad);
+				}
+			}
+	 	}
+		//subtract fd
+		for(i = 0; i < MAX_FDS;i++)
+		{
+			if ((share_mem[i].fd != -1) && (FD_ISSET(share_mem[i].fd, &fds)) && (recvfrom(share_mem[i].fd, buffer, 1024, 0, (struct sockaddr *)&ad, (socket_t *)&sock_len) == 0) )
+			{
+				share_mem[i].fd == -1;
+				memset(&share_mem[i].s_addr, 0, sizeof(share_mem[i].s_addr));
+			}
+		}
 	}
 }

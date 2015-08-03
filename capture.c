@@ -64,85 +64,26 @@ static int  xioctl(int xfd, int request, void *arg)
 
 
 	return r; 
-} 
-
-static void process_image (const void *p,int len) 
+}
+ 
+struct shared_sock
 {
-	/* 
-	   unsigned short int *rep;
-	   rep=(unsigned short int *)p;
-	   int i=0,bits_per_pixel =16;                      
-	   int line_x =line_y = 0;
-	   int xres=600;
-	   int InfoHead.ciHeight=480;
-	//向framebuffer中写BMP图片
-	int ftp=open("/dev/fb0",O_RDWR);
-	printf("ftp:%d\n",ftp);
-	while(!feof(p))
-	{
-	PIXEL *pix;
-	unsigned short int tmp;
-	//rc = fread( (char *)&pix, 1, sizeof(unsigned short int), fp);
-	//if (rc != sizeof(unsigned short int))
-	//{ 
-	// break; 
-	//}
-	pix=*(rep+i++);
-	location = line_x * bits_per_pixel / 8 + (InfoHead.ciHeight - line_y - 1) * xres * bits_per_pixel / 8;
+	int fd;
+	struct sockaddr s_addr;
+};
 
-	//显示每一个像素
-	tmp=pix.red<<0 | pix.green<<5 | pix.blue<<11;
-	 *((unsigned short int*)(ftp + location)) = tmp;
-
-	 line_x++;
-	 if (line_x == InfoHead.ciWidth )
-	 {
-	 line_x = 0;
-	 line_y++;
-
-	 if(line_y == InfoHead.ciHeight)
-	 {
-	 break;
-	 }
-	 }
-	 }
-
-
-	 printf("len:%d\n",len);
-	 fputc ('.', stdout); 
-	 fflush (stdout); 
-	 */
-
-
-	/* do something by youself
-	 **
-	 */
-	int i;
-	int retval;
-	int rlen;
-	int *socket_fds;
-	int nums;
+static void process_image (const void *p,int len, struct shared_sock share) 
+{
+	int retlen;
+	retlen = sendto(share.fd, p, len, 0, share.s_addr, sizeof(struct sockaddr));	
 	
-	get_socket_fds(socket_fds, &nums);
-
-	for (i = 0; i < nums; i++)
-	{
-		rlen = write(fds[i], (char *)p, len);
-		if (rlen != len)
-		{
-			over_threads();
-			socket_close(fds);
-			free(socket_fds);
-			bug("socket write\n");
-		}
-	}
-	free(socket_fds);
 } 
 
-static int read_frame(void) 
+static int read_frame(struct shared_sock *shared) 
 { 
 	struct v4l2_buffer buf; 
-	unsigned int i; 
+	unsigned int i;
+	struct shared_sock s_socks; 
 
 	switch (io) { 
 		case IO_METHOD_READ: 
@@ -186,10 +127,20 @@ static int read_frame(void)
 				} 
 			} 
 
-			assert (buf.index < n_buffers); 
-
-			process_image (buffers[buf.index].start,buffers[buf.index].length); 
-
+			assert (buf.index < n_buffers);
+			//read socks from shared mem
+			//lock
+			while(!semaphore_p());
+			for(i = 0;i < 6; i++)
+			{
+				s_socks[i] = shared[i];
+			}
+			semaphore_v();
+			//unlock
+			for (i = 0; i < 6; i++)
+				if(s_socks[i].fd != -1)
+					process_image (buffers[buf.index].start,buffers[buf.index].length, s_socks[i]); 
+			}
 			if (-1 == xioctl (fd, VIDIOC_QBUF, &buf)) 
 
 
@@ -222,7 +173,7 @@ static int read_frame(void)
 	} 
 	return 1;
 } 
-static void mainloop (void){
+static void mainloop (struct shared_sock *shared){
 	unsigned int count; 
 	count = 100; 
 	while (count-- > 0) { 
@@ -251,7 +202,7 @@ static void mainloop (void){
 				exit (EXIT_FAILURE); 
 			} 
 
-			if (read_frame ()) 
+			if (read_frame (shared)) 
 				break; 
 
 			/* EAGAIN - continue select loop. */ 
@@ -627,12 +578,62 @@ long_options [] = {
 	{ 0, 0, 0, 0 } 
 }; 
 
+static sem_id = 0;
+sem_t sock_sem;
+sem_t write_sem;
 
+static int set_semvalue()
+{
+	union semun sem_union;
+	
+	sem_union.val = 1;
+	if(semctl(sem_id, 0, SETVAL, sem_union) == 1)
+		return 0;
+	return 1;
+}
+
+static void del_semvalue()
+{
+	union semun sem_union;
+	
+	if(semctl(sem_id, 0, IPC_RMID, sem_union) == 1)
+		fprintf(stderr, "failed to delete semaphore\n");
+}
+
+static int semaphore_p()
+{
+	struct sembuf sem_b;
+	sem_b.sem_num = 0;
+	sem_b.sem_op = -1;
+	sem_b.sem_flag = SEM_UNDO;
+	if(semop(sem_id, &sem_b, 1) == -1)
+	{
+		fprintf(stderr, "semaphore_p failed\n");
+		return 0;
+	}
+	return 1;
+}
+
+static int semaphore_v()
+{
+	struct sembuf sem_b;
+	sem_b.sem_num = 0;
+	sem_b.sem_op = 1;
+	sem_b.sem_flag = SEM_UNDO;
+	if(semop(sem_id, &sem_b, 1) == -1)
+	{
+		fprintf(stderr, "semaphore_v failed\n");
+		return 0;
+	}
+	return 1;
+}
 
 int main(int argc,  char **  argv) 
-{ 
+{
+	pthread_t save_sock_pthread;
+	struct shared_sock *shared;
 	dev_name = "/dev/video0";
-
+	
 	for (;;) 
 	{ 
 		int index; 
@@ -663,27 +664,41 @@ int main(int argc,  char **  argv)
 				exit (EXIT_FAILURE); 
 		} 
 	}
-	
-	//create thread
-	pid_t pid;
-	pid = fork();
-	if (pid < 0)
+	int shmid;
+	void *shm = NULL;
+
+	shmid = shmget((key_t)1234, 6*sizeof(struct shared_sock), 0666 | IPC_CREAT);
+	if(shmid == -1)
 	{
-		perror("error:");
-		exit(-1);
+		perror("shmet failed");
 	}
-	if (pid == 0)
+	shm = shmat(shmid, 0, 0);
+	if(shm == (void *)-1)
 	{
-		// to do
-		create_save_socket();
+		perror("shmat failed");	
+	}
+	printf("\nMemory attached at %x\n", (int)shm);
+	shared = (struct shared_sock *)shm;
+	//create thread
+	int thread_1 = pthread_create(&save_sock_pthread, NULL, (void *)&create_save_socket, (void *)(&thread_i));
+	if(thread_1 != 0)
+	{
+		perror("create_save_socket");
+	}
+	
+	sem_id = semget((key_t)2345, 1, 0666 | IPC_CREAT);
+	if (!set_semvalue())
+	{
+		perror("failed to initialize semaphore");
 	}
 	open_device(); 
-	init_device(); 
+	init_device();
 	start_capturing(); 
-	mainloop(); 
+	mainloop(shared); 
 	stop_capturing(); 
 	uninit_device(); 
 	close_device(); 
+	pthread_join(save_sock_pthread, NULL);
 	exit(EXIT_SUCCESS); 
 	return 0; 
 } 
