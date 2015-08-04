@@ -1,21 +1,23 @@
 #Makefile for system with GNU tools
-CC = gcc
-IFALGS = -idirafter dummyinc
-CFLAGS = -O2 -Wall -W -Wshadow
+#CC = arm-linux-gcc
+#IFALGS = -idirafter dummyinc
+#CFLAGS = -O2 -c -Wall -W -Wshadow -o
 
-
+#PATH = /usr/include
 LIBS = `sh mk_out_path.sh` 
 LINK = 
 
-OBJS = capture.o 
+OBJS = capture.o socket.o 
 
-
-.c.o:
-	$(CC) -c $*.c $(CFLAGS) $(IFLAGS)
-
-v4l2_capture: $(OBJS)
-	$(CC) -o v4l2_capture $(OBJS) 
+capture.bin: $(OBJS)
+#	arm-linux-ld -Ttext 0x30000000 -o cap_elf $^
+#	arm-linux-objcopy -O binary -S cap_elf $@
+#	arm-linux-objdump -D -m arm cap_elf > cap.dis
+	gcc -Wunused-result -o v4l2_capture $^ -lpthread
 	$(LIBS)
+
+%.o:%.c
+	gcc -Wall -O2 -c -o $@ $< 
 
 clean:
 	rm -rf out

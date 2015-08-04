@@ -24,6 +24,10 @@
 #include <asm/types.h>          /* for videodev2.h */ 
 
 #include <linux/videodev2.h> 
+#include <sys/ipc.h>
+#include <sys/sem.h>
+#include <pthread.h>
+
 #include "myv4l2.h"
 #define CLEAR(x) memset (&(x), 0, sizeof (x)) 
 
@@ -66,16 +70,10 @@ static int  xioctl(int xfd, int request, void *arg)
 	return r; 
 }
  
-struct shared_sock
-{
-	int fd;
-	struct sockaddr s_addr;
-};
-
 static void process_image (const void *p,int len, struct shared_sock share) 
 {
 	int retlen;
-	retlen = sendto(share.fd, p, len, 0, share.s_addr, sizeof(struct sockaddr));	
+	retlen = sendto(share.fd, p, len, 0, &(share.s_addr), sizeof(struct sockaddr));	
 	
 } 
 
@@ -83,7 +81,7 @@ static int read_frame(struct shared_sock *shared)
 { 
 	struct v4l2_buffer buf; 
 	unsigned int i;
-	struct shared_sock s_socks; 
+	struct shared_sock s_socks[6]; 
 
 	switch (io) { 
 		case IO_METHOD_READ: 
@@ -102,7 +100,7 @@ static int read_frame(struct shared_sock *shared)
 				} 
 			} 
 
-			process_image (buffers[0].start,buffers[0].length); 
+	//		process_image (buffers[0].start,buffers[0].length); 
 
 			break; 
 
@@ -130,20 +128,19 @@ static int read_frame(struct shared_sock *shared)
 			assert (buf.index < n_buffers);
 			//read socks from shared mem
 			//lock
-			while(!semaphore_p());
+			semaphore_p();
 			for(i = 0;i < 6; i++)
 			{
-				s_socks[i] = shared[i];
+				memcpy(&s_socks[i], shared+i, sizeof(struct shared_sock));
 			}
 			semaphore_v();
 			//unlock
 			for (i = 0; i < 6; i++)
+			{
 				if(s_socks[i].fd != -1)
-					process_image (buffers[buf.index].start,buffers[buf.index].length, s_socks[i]); 
+					process_image (buffers[buf.index].start, buffers[buf.index].length, s_socks[i]); 
 			}
 			if (-1 == xioctl (fd, VIDIOC_QBUF, &buf)) 
-
-
 				errno_exit ("VIDIOC_QBUF"); 
 			break; 
 		case IO_METHOD_USERPTR: 
@@ -578,9 +575,7 @@ long_options [] = {
 	{ 0, 0, 0, 0 } 
 }; 
 
-static sem_id = 0;
-sem_t sock_sem;
-sem_t write_sem;
+static int sem_id = 0;
 
 static int set_semvalue()
 {
@@ -600,12 +595,12 @@ static void del_semvalue()
 		fprintf(stderr, "failed to delete semaphore\n");
 }
 
-static int semaphore_p()
+int semaphore_p()
 {
 	struct sembuf sem_b;
 	sem_b.sem_num = 0;
 	sem_b.sem_op = -1;
-	sem_b.sem_flag = SEM_UNDO;
+	sem_b.sem_flg = SEM_UNDO;
 	if(semop(sem_id, &sem_b, 1) == -1)
 	{
 		fprintf(stderr, "semaphore_p failed\n");
@@ -614,12 +609,12 @@ static int semaphore_p()
 	return 1;
 }
 
-static int semaphore_v()
+int semaphore_v()
 {
 	struct sembuf sem_b;
 	sem_b.sem_num = 0;
 	sem_b.sem_op = 1;
-	sem_b.sem_flag = SEM_UNDO;
+	sem_b.sem_flg = SEM_UNDO;
 	if(semop(sem_id, &sem_b, 1) == -1)
 	{
 		fprintf(stderr, "semaphore_v failed\n");
@@ -680,7 +675,7 @@ int main(int argc,  char **  argv)
 	printf("\nMemory attached at %x\n", (int)shm);
 	shared = (struct shared_sock *)shm;
 	//create thread
-	int thread_1 = pthread_create(&save_sock_pthread, NULL, (void *)&create_save_socket, (void *)(&thread_i));
+	int thread_1 = pthread_create(&save_sock_pthread, NULL, (void *)&create_save_socket, NULL/*(void *)(&thread_i)*/);
 	if(thread_1 != 0)
 	{
 		perror("create_save_socket");
